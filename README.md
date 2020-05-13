@@ -1,9 +1,9 @@
 # stockmarket-neural-network
 
 ## To run Reccurent Neural network
-'''bash
+```bash
 python RNNMulti.py
-'''
+```
 
 ## Relevant variables:
 * Global variables

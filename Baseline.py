@@ -61,7 +61,7 @@ def readFile(fileName):
     return df
 
 def main():
-    fileName = "price-volume-data/Data/Stocks/a.us.txt"
+    fileName = "price-volume-data/Data/Stocks/aa.us.txt"
     df=readFile(fileName)
 
     #Choose features
@@ -76,6 +76,10 @@ def main():
 
     uni_train_mean = uni_data[:TRAIN_SPLIT].mean()
     uni_train_std = uni_data[:TRAIN_SPLIT].std()
+
+    print('Uni_data:'+uni_data)
+    print('Uni_train_mean' + uni_train_mean)
+    print('Uni_train_std:' + uni_train_std)
 
     #Standardize the data
     uni_data = (uni_data - uni_train_mean) / uni_train_std

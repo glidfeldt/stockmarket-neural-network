@@ -5,8 +5,12 @@ import csv
 import os
 
 if __name__ == "__main__":
-    dirname, filename = os.path.split(os.path.abspath(__file__))
-    fileName = dirname+"/price-volume-data/Data/Stocks/a.us.txt"
-    df = pd.read_csv(fileName)
-    newSVR(df)
-    rnnNew()
+    filenames = ["a.us.txt", "aa.us.txt", "aaap.us.txt"]
+    rmse_rnn=[]
+    rmse_rnnNew=[]
+    for file in filenames:
+        dirname, filename = os.path.split(os.path.abspath(__file__))
+        fileName = dirname+"/price-volume-data/Data/Stocks/"+"file"
+        df = pd.read_csv(fileName)
+        newSVR(df)
+        rnnNew()

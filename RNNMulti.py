@@ -5,148 +5,236 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 import pandas as pd
+from sklearn.metrics import mean_squared_error
+from math import sqrt
 
-#Global variables
-BATCH_SIZE = 256            #Slice the data into batches
-BUFFER_SIZE = 10000         # Buffer size to shuffle the dataset
-                            # (TF data is designed to work with possibly infinite sequences,
-                            # so it doesn't attempt to shuffle the entire sequence in memory. Instead,
-                            # it maintains a buffer in which it shuffles elements).
-EVALUATION_INTERVAL = 200
-EPOCHS = 10                 #Iterate over the dataset
 
-past_history = 720          #Days to analyze
-future_target = 72          #Days to predict
-STEP = 6
 
-def multivariate_data(dataset, target, start_index, end_index, history_size,
-                      target_size, step, single_step=False):
-  data = []
-  labels = []
+class RNNMulti():
+    def __init__(self, dataset,
+                 train_split, past_history,
+                 future_target, step,
+                 epochs, evaluation_interval,
+                 batch_size, buffer_size):
 
-  start_index = start_index + history_size
-  if end_index is None:
-    end_index = len(dataset) - target_size
+        self.dataset=dataset
+        self.train_split=train_split
+        self.past_history=past_history
+        self.future_target=future_target
+        self.step=step
+        self.epochs=epochs
+        self.evaluation_interval=evaluation_interval
+        self.batch_size=batch_size
+        self.buffer_size=buffer_size
 
-  for i in range(start_index, end_index):
-    indices = range(i-history_size, i, step)
-    data.append(dataset[indices])
+        self.multi_step_model=None
+        self.multi_step_history=None
+        self.val_data_multi=None
 
-    if single_step:
-      labels.append(target[i+target_size])
-    else:
-      labels.append(target[i:i+target_size])
 
-  return np.array(data), np.array(labels)
+        '''
+        self.x_train_multi, self.y_train_multi = self.multivariate_data(self.dataset, self.dataset[:, 1], 0,
+                                                         self.train_split, self.past_history,
+                                                         self.future_target, self.step)
+        self.x_val_multi, self.y_val_multi = self.multivariate_data(self.dataset, self.dataset[:, 1],
+                                                     self.train_split, None, self.past_history,
+                                                     self.future_target, self.step)
+        '''
+        self.x_train_uni, self.y_train_uni = self.univariate_data(self.dataset, 0, self.train_split,
+                                                   self.past_history,
+                                                   self.future_target)
+        self.x_val_uni, self.y_val_uni = self.univariate_data(self.dataset, self.train_split, None,
+                                                  self.past_history,
+                                                  self.future_target)
 
-def univariate_data(dataset, start_index, end_index, history_size, target_size):
-    data = []
-    labels = []
+        self.train_univariate = tf.data.Dataset.from_tensor_slices((self.x_train_uni, self.y_train_uni))
+        self.train_univariate = self.train_univariate.cache().shuffle(self.buffer_size).batch(self.batch_size).repeat()
 
-    start_index = start_index + history_size
-    if end_index is None:
-        end_index = len(dataset) - target_size
+        self.val_univariate = tf.data.Dataset.from_tensor_slices((self.x_val_uni, self.y_val_uni))
+        self.val_univariate = self.val_univariate.batch(self.batch_size).repeat()
 
-    for i in range(start_index, end_index):
-        indices = range(i-history_size, i)
-        # Reshape data from (history_size,) to (history_size, 1)
-        data.append(np.reshape(dataset[indices], (history_size, 1)))
-        labels.append(dataset[i+target_size])
-    return np.array(data), np.array(labels)
+        self.simple_lstm_model = tf.keras.models.Sequential([
+            tf.keras.layers.LSTM(8, input_shape=self.x_train_uni.shape[-2:]),
+            tf.keras.layers.Dense(1)
+        ])
 
-def create_time_steps(length):
-  return list(range(-length, 0))
+        self.simple_lstm_model.compile(optimizer='adam', loss='mae')
 
-def baseline(history):
-  return np.mean(history)
+    def uni_train(self):
+        self.simple_lstm_model.fit(self.train_univariate, epochs=self.epochs,
+                              steps_per_epoch=self.evaluation_interval,
+                              validation_data=self.val_univariate, validation_steps=50)
 
-def plot_train_history(history, title):
-  loss = history.history['loss']
-  val_loss = history.history['val_loss']
+    def multivariate_data(self, dataset, target, start_index, end_index, history_size,
+                          target_size, step, single_step=False):
+        data = []
+        labels = []
 
-  epochs = range(len(loss))
+        start_index = start_index + history_size
+        if end_index is None:
+            end_index = len(dataset) - target_size
 
-  plt.figure()
+        for i in range(start_index, end_index):
+            indices = range(i - history_size, i, step)
+            data.append(dataset[indices])
 
-  plt.plot(epochs, loss, 'b', label='Training loss')
-  plt.plot(epochs, val_loss, 'r', label='Validation loss')
-  plt.title(title)
-  plt.legend()
+            if single_step:
+                labels.append(target[i + target_size])
+            else:
+                labels.append(target[i:i + target_size])
 
-  plt.show()
+        return np.array(data), np.array(labels)
 
-def show_plot(plot_data, delta, title):
-  labels = ['History', 'True Future', 'Model Prediction']
-  marker = ['.-', 'rx', 'go']
-  time_steps = create_time_steps(plot_data[0].shape[0])
-  if delta:
-    future = delta
-  else:
-    future = 0
+    def univariate_data(dataset, start_index, end_index, history_size, target_size):
+        data = []
+        labels = []
 
-  plt.title(title)
-  for i, x in enumerate(plot_data):
-    if i:
-      plt.plot(future, plot_data[i], marker[i], markersize=10,
-               label=labels[i])
-    else:
-      plt.plot(time_steps, plot_data[i].flatten(), marker[i], label=labels[i])
-  plt.legend()
-  plt.xlim([time_steps[0], (future+5)*2])
-  plt.xlabel('Time-Step')
-  plt.show()
-  return plt
+        start_index = start_index + history_size
+        if end_index is None:
+            end_index = len(dataset) - target_size
 
-def readFile(fileName):
-    # Read file
-    df = pd.read_csv(fileName, sep=",", header=0)
-    return df
+        for i in range(start_index, end_index):
+            indices = range(i - history_size, i)
+            # Reshape data from (history_size,) to (history_size, 1)
+            data.append(np.reshape(dataset[indices], (history_size, 1)))
+            labels.append(dataset[i + target_size])
+        return np.array(data), np.array(labels)
 
-def multi_step_plot(history, true_future, prediction):
-  plt.figure(figsize=(12, 6))
-  num_in = create_time_steps(len(history))
-  num_out = len(true_future)
 
-  plt.plot(num_in, np.array(history[:, 1]), label='History')
-  plt.plot(np.arange(num_out)/STEP, np.array(true_future), 'bo',
-           label='True Future')
-  if prediction.any():
-    plt.plot(np.arange(num_out)/STEP, np.array(prediction), 'ro',
-             label='Predicted Future')
-  plt.legend(loc='upper left')
-  plt.show()
+    def univariate_data(self, dataset, start_index, end_index, history_size, target_size):
+        data = []
+        labels = []
+
+        start_index = start_index + history_size
+        if end_index is None:
+            end_index = len(dataset) - target_size
+
+        for i in range(start_index, end_index):
+            indices = range(i - history_size, i)
+            # Reshape data from (history_size,) to (history_size, 1)
+            data.append(np.reshape(dataset[indices], (history_size, 1)))
+            labels.append(dataset[i + target_size])
+        return np.array(data), np.array(labels)
+
+    def train(self):
+        train_data_multi = tf.data.Dataset.from_tensor_slices((self.x_train_multi, self.y_train_multi))
+        train_data_multi = train_data_multi.cache().shuffle(self.buffer_size).batch(self.batch_size).repeat()
+
+        self.val_data_multi = tf.data.Dataset.from_tensor_slices((self.x_val_multi, self.y_val_multi))
+        self.val_data_multi = self.val_data_multi.batch(self.batch_size).repeat()
+
+        #for x, y in train_data_multi.take(1):
+        #    self.multi_step_plot(x[0], y[0], np.array([0]))
+
+        self.multi_step_model = tf.keras.models.Sequential()
+        self.multi_step_model.add(tf.keras.layers.LSTM(32,
+                                                  return_sequences=True,
+                                                  input_shape=self.x_train_multi.shape[-2:]))
+        self.multi_step_model.add(tf.keras.layers.LSTM(16, activation='relu'))
+        self.multi_step_model.add(tf.keras.layers.Dense(72))
+
+        self.multi_step_model.compile(optimizer=tf.keras.optimizers.RMSprop(clipvalue=1.0), loss='mae')
+
+        self.multi_step_history = self.multi_step_model.fit(train_data_multi, epochs=self.epochs,
+                                                  steps_per_epoch=self.evaluation_interval,
+                                                  validation_data=self.val_data_multi,
+                                                  validation_steps=50)
+
+    def plot_train_history(self, history, title):
+        loss = history.history['loss']
+        val_loss = history.history['val_loss']
+
+        epochs = range(len(loss))
+
+        plt.figure()
+
+        plt.plot(epochs, loss, 'b', label='Training loss')
+        plt.plot(epochs, val_loss, 'r', label='Validation loss')
+        plt.title(title)
+        plt.legend()
+
+        plt.show()
+
+    def result(self):
+        rmse = []
+        for x, y in self.val_data_multi.take(3):
+            self.multi_step_plot(x[0], y[0], self.multi_step_model.predict(x)[0])
+            rmse.append(sqrt(mean_squared_error(y[0], self.multi_step_model.predict(x)[0])))
+        return rmse
+
+    def create_time_steps(self, length):
+        return list(range(-length, 0))
+
+    def plot_train_history(self, history, title):
+        loss = history.history['loss']
+        val_loss = history.history['val_loss']
+
+        epochs = range(len(loss))
+
+        plt.figure()
+
+        plt.plot(epochs, loss, 'b', label='Training loss')
+        plt.plot(epochs, val_loss, 'r', label='Validation loss')
+        plt.title(title)
+        plt.legend()
+
+        plt.show()
+
+    def baseline(self, history):
+        return np.mean(history)
+
+    def multi_step_plot(self, history, true_future, prediction):
+        plt.figure(figsize=(12, 6))
+        num_in = self.create_time_steps(len(history))
+        num_out = len(true_future)
+
+        plt.plot(num_in, np.array(history[:, 1]), label='History')
+        plt.plot(np.arange(num_out) / self.step, np.array(true_future), 'bo',
+                 label='True Future')
+        if prediction.any():
+            plt.plot(np.arange(num_out) / self.step, np.array(prediction), 'ro',
+                     label='Predicted Future')
+        plt.legend(loc='upper left')
+        plt.show()
+
+    def show_plot(self, plot_data, delta, title):
+        labels = ['History', 'True Future', 'Model Prediction']
+        marker = ['.-', 'rx', 'go']
+        time_steps = self.create_time_steps(plot_data[0].shape[0])
+        if delta:
+            future = delta
+        else:
+            future = 0
+
+        plt.title(title)
+        for i, x in enumerate(plot_data):
+            if i:
+                plt.plot(future, plot_data[i], marker[i], markersize=10,
+                         label=labels[i])
+            else:
+                plt.plot(time_steps, plot_data[i].flatten(), marker[i], label=labels[i])
+        plt.legend()
+        plt.xlim([time_steps[0], (future + 5) * 2])
+        plt.xlabel('Time-Step')
+        plt.show()
+        #return plt
+
+
+
+
+
+
+
+
+
+
+
+
+'''
 
 def main():
-    fileName = "price-volume-data/Data/Stocks/a.us.txt"
-    df = readFile(fileName)
-    features_considered = ['Open', 'High', 'Low', 'Close', 'Volume', 'OpenInt']
-    features = df[features_considered]
-    features.index = df['Date']
 
-    #features.plot(subplots=True)
-    #plt.show()
 
-    #Where to split
-    TRAIN_SPLIT = int(len(df)/2)
-    print(TRAIN_SPLIT)
-
-    #Split and normalize
-    dataset = features.values
-    data_mean = dataset[:TRAIN_SPLIT].mean(axis=0)
-    data_std = dataset[:TRAIN_SPLIT].std(axis=0)
-
-    #dataset = (dataset - data_mean) / data_std
-    dataset = tf.keras.utils.normalize(
-        dataset, axis=0, order=2
-    )
-    print(dataset.shape)
-
-    x_train_multi, y_train_multi = multivariate_data(dataset, dataset[:, 1], 0,
-                                                     TRAIN_SPLIT, past_history,
-                                                     future_target, STEP)
-    x_val_multi, y_val_multi = multivariate_data(dataset, dataset[:, 1],
-                                                 TRAIN_SPLIT, None, past_history,
-                                                 future_target, STEP)
 
     #print('Single window of past history : {}'.format(x_train_single[0].shape))
 
@@ -174,7 +262,12 @@ def main():
                                               validation_steps=50)
     plot_train_history(multi_step_history, 'Multi-Step Training and validation loss')
 
+
+    #Calcuualte rmse
+
     for x, y in val_data_multi.take(3):
+        rms = sqrt(mean_squared_error(y[0], multi_step_model.predict(x)[0]))
+        print("RMS: "+str(rms))
         multi_step_plot(x[0], y[0], multi_step_model.predict(x)[0])
 
 
@@ -186,3 +279,4 @@ def main():
 
 
 main()
+'''

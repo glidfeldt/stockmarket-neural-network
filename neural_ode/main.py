@@ -300,7 +300,7 @@ def main():
     ode_true = NeuralODE(SpiralFunctionExample())
     ode_trained = NeuralODE(RandomLinearODEF())
 
-    #conduct_experiment(ode_true, ode_trained, 500, "linear")
+    conduct_experiment(ode_true, ode_trained, 500, "linear")
 
     func = TestODEF(Tensor([[-0.1, -0.5], [0.5, -0.1]]), Tensor([[0.2, 1.], [-1, 0.2]]), Tensor([[-1., 0.]]))
     ode_true = NeuralODE(func)

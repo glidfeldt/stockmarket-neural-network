@@ -7,6 +7,8 @@ import matplotlib.pyplot as plt
 from sklearn.svm import SVR # Support Vector Regression model
 #rom sklearn.model_selection import train_test_split
 import os
+from sklearn.metrics import mean_squared_error
+from math import sqrt
 
 
 def newSVR(df):
@@ -60,13 +62,14 @@ def newSVR(df):
     #print(dates)
 
     #Predict price of stock on given (last or similar) day
-    predicted_price = predict_prices(dates,prices,[[82]])
+    predicted_price = predict_prices(dates,prices,[[82]], target)
     print('Prediction: '+str(predicted_price))
     print('Target: '+str(target))
+    return sqrt(mean_squared_error([target], [predicted_price]))
 
 
 # Three different SVR models with different kernels
-def predict_prices(dates, prices, x):
+def predict_prices(dates, prices, x, target):
     print("started..")
 
     #Create 3 SVR models C = error term
@@ -94,15 +97,23 @@ def predict_prices(dates, prices, x):
 
     # Plot preset
     plt.figure(dpi=600)
-
+    x_axis = list(range(-20, 0))
+    print(x_axis)
+    prices=prices[-20:]
     #Plot models on a graph the see which one has the best fit
-    plt.scatter(dates,prices,color = 'black', label='Target: '+str(x))
+    plt.scatter(x_axis,prices,color = 'black', label='Target: '+str(x))
     #plt.scatter(dates,svr_lin.predict(dates),color = 'green', label='Linear: '+result_lin)
     #plt.scatter(dates,svr_poly.predict(dates),color = 'red', label='Poly: '+result_poly)
-    plt.scatter(dates,svr_rbf.predict(dates),color = 'blue', label='RBF: '+result_rbf)
+    #plt.scatter(x_axis,svr_rbf.predict(dates)[-20:]+[0]*10,color = 'blue', label='RBF: '+result_rbf)
+    plt.plot(1, target, "rx", label="True future")
+    plt.plot(1, svr_rbf.predict(x)[0], "go", label="Model Prediction")
+
 
     plt.title('Support Vector Regression models')
-    plt.xlabel('Time')
+    plt.legend()
+    print(x_axis)
+    plt.xlim(x_axis[0], 5*2)
+    plt.xlabel('Time-Step')
     plt.ylabel('Stock Price')
     plt.legend()
     plt.show()

@@ -4,14 +4,17 @@ import pandas as pd
 import csv
 import os
 
+def cross_validation_rmse(list):
+    return sum(list)/len(list)
+
+
 if __name__ == "__main__":
     x_axis = list(range(-20, 10))
     print(x_axis[-1:])
     filenames = ["a.us.txt", "aa.us.txt", "aaap.us.txt"]
     rmse_rnn=[]
     rmse_svr=[]
-    tot_svr=0
-    tot_rnn=0
+
     for file in filenames:
         dirname, _ = os.path.split(os.path.abspath(__file__))
         fileName = dirname+"/price-volume-data/Data/Stocks/"+file
@@ -20,15 +23,16 @@ if __name__ == "__main__":
         #SVR
         rmse=newSVR(df)
         rmse_svr.append(rmse)
-        tot_svr+=rmse
 
 
         #RNN
         rmse =rnnNew()
-        rmse_svr.append(rmse)
-        tot_rnn +=rmse
+        rmse_rnn.append(rmse)
 
     print("-----SVR-------")
     print(rmse_svr)
-    tot_svr
+    print(cross_validation_rmse(rmse_svr))
+
     print("Total: +")
+    print(rmse_rnn)
+    print(cross_validation_rmse(rmse_rnn))

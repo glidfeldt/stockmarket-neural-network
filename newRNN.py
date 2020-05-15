@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 import pandas as pd
+from sklearn.metrics import mean_squared_error
+from math import sqrt
 
 mpl.rcParams['figure.figsize'] = (8, 6)
 mpl.rcParams['axes.grid'] = False
@@ -73,11 +75,12 @@ def rnnNew():
     Predict using the simple LSTM model
     Now that you have trained your simple LSTM, let's try and make a few predictions.
     '''
-
+    rmseTot=[]
     for x, y in val_univariate.take(3):
-        plot = show_plot([x[0].numpy(), y[0].numpy(),
+        t=show_plot([x[0].numpy(), y[0].numpy(),
                           simple_lstm_model.predict(x)[0]], 0, 'Simple LSTM model')
-        plot.show()
+        rmseTot.append(t)
+    return sum(rmseTot)/len(rmseTot)
 
 def univariate_data(dataset, start_index, end_index, history_size, target_size):
   data = []
@@ -134,6 +137,8 @@ def create_time_steps(length):
 
 
 def show_plot(plot_data, delta, title):
+
+
   labels = ['History', 'True Future', 'Model Prediction']
   marker = ['.-', 'rx', 'go']
   time_steps = create_time_steps(plot_data[0].shape[0])
@@ -152,7 +157,11 @@ def show_plot(plot_data, delta, title):
   plt.legend()
   plt.xlim([time_steps[0], (future+5)*2])
   plt.xlabel('Time-Step')
-  return plt
+  plt.show()
+  t=plot_data[1]
+  p=np.float64(plot_data[2][0])
+  rmse=sqrt(mean_squared_error([t], [p]))
+  return rmse
 
 #show_plot([x_train_uni[0], y_train_uni[0]], 0, 'Sample Example')
 
